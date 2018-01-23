@@ -2,30 +2,51 @@ package web
 
 import (
     "os"
+    "net"
     "net/http"
+    "net/url"
     "io"
 )
 
-func DownloadFile( localFile string, remoteURL string ) ( errMsg error ) {
+type DownloadFileParams struct {
+    LocalFile string
+    RemoteURL string
+    UserName string
+    PassWord string
+}
 
-  localFH, errMsg := os.Create( localFile )
-  if errMsg != nil  {
-    return errMsg
-  }
-  defer localFH.Close()
+func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
+    
+    // The following is groundwork for accepting various schemas
+    parsedURL, errMsg := url.Parse( dlFileParams.RemoteURL )
+    if errMsg != nil {
+        return errMsg
+    }
+    hostName, hostPort, errMsg := net.SplitHostPort( parsedURL.Host )
+    if errMsg != nil {
+        hostName = parsedURL.Host
+        hostPort = ""
+    }
 
-  // Get the data
-  httpResp, errMsg := http.Get( remoteURL )
-  if errMsg != nil {
-    return errMsg
-  }
-  defer httpResp.Body.Close()
+    // Create the local file
+    localFH, errMsg := os.Create( dlFileParams.LocalFile )
+    if errMsg != nil  {
+        return errMsg
+    }
+    defer localFH.Close()
 
-  // Writer the body to file
-  _, errMsg = io.Copy( localFH, httpResp.Body )
-  if errMsg != nil  {
-    return errMsg
-  }
+    // Get the data
+    httpResp, errMsg := http.Get( dlFileParams.RemoteURL )
+    if errMsg != nil {
+        return errMsg
+    }
+    defer httpResp.Body.Close()
 
-  return nil
+    // Writer the body to file
+    _, errMsg = io.Copy( localFH, httpResp.Body )
+    if errMsg != nil  {
+        return errMsg
+    }
+
+    return nil
 }

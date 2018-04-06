@@ -6,6 +6,8 @@ import (
     "net/http"
     "net/url"
     "io"
+	"io/ioutil"
+	"fmt"
 )
 
 type DownloadFileParams struct {
@@ -15,6 +17,21 @@ type DownloadFileParams struct {
     PassWord string
 }
 
+type DownloadURLParams struct {
+    RemoteURL string
+    UserName string
+    PassWord string
+}
+
+type HTTPError struct {
+	StatusCode int
+	Status     string
+}
+
+func ( hError HTTPError) Error() string {
+	return fmt.Sprintf("HTTP Error: %s", hError.Status)
+}
+
 func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
     
     // The following is groundwork for accepting various schemas
@@ -22,11 +39,8 @@ func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
     if errMsg != nil {
         return errMsg
     }
-    hostName, hostPort, errMsg := net.SplitHostPort( parsedURL.Host )
-    if errMsg != nil {
-        hostName = parsedURL.Host
-        hostPort = ""
-    }
+
+	_, _ = splitURL( parsedURL.Host )
 
     // Create the local file
     localFH, errMsg := os.Create( dlFileParams.LocalFile )
@@ -49,4 +63,40 @@ func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
     }
 
     return nil
+}
+func splitURL( fullURL string ) ( hName string, hPort string ) {
+	hostName, hostPort, errMsg := net.SplitHostPort( fullURL )
+	if errMsg != nil {
+		hostName = fullURL
+		hostPort = ""
+	}
+	fmt.Printf( hostName, hostPort )
+
+	return hName, hPort
+}
+
+
+func DownloadURL( dlURLParams DownloadURLParams ) ( urlContent string, errMsg error ) {
+
+    // The following is groundwork for accepting various schemas
+    parsedURL, errMsg := url.Parse( dlURLParams.RemoteURL )
+    if errMsg != nil {
+        return "", errMsg
+    }
+	_, _ = splitURL( parsedURL.Host )
+
+    // Get the data
+    httpResp, errMsg := http.Get( dlURLParams.RemoteURL )
+    if errMsg != nil {
+        return "", errMsg
+    }
+	if httpResp.StatusCode < 200 || httpResp.StatusCode > 300 {
+		return "", HTTPError{ StatusCode: httpResp.StatusCode, Status: httpResp.Status }
+	}
+
+	defer httpResp.Body.Close()
+	remoteContent, errMsg := ioutil.ReadAll( httpResp.Body )
+
+//	contentLength := bytes.IndexByte( remoteContent, 0 )
+    return string( remoteContent[ : ] ), nil
 }

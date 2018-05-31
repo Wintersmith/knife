@@ -72,3 +72,4 @@ func LoadOPML( opmlFile string ) ( Body ){
 
 	return opmlList.Body
 }
+

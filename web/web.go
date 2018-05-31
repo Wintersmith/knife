@@ -8,6 +8,9 @@ import (
     "io"
 	"io/ioutil"
 	"fmt"
+	"encoding/json"
+	"golang.org/x/net/html"
+	"regexp"
 )
 
 type DownloadFileParams struct {
@@ -30,6 +33,16 @@ type HTTPError struct {
 
 func ( hError HTTPError) Error() string {
 	return fmt.Sprintf("HTTP Error: %s", hError.Status)
+}
+
+func RespondWithError( httpWriter http.ResponseWriter, retCode int, errMessage string) {
+	RespondWithJSON( httpWriter, retCode, map[string]string{ "error": errMessage } )
+}
+func RespondWithJSON( httpWriter http.ResponseWriter, retCode int, httpPayload interface{}) {
+	httpResp, _ := json.Marshal( httpPayload )
+	httpWriter.Header().Set("Content-Type", "application/json")
+	httpWriter.WriteHeader( retCode )
+	httpWriter.Write( httpResp )
 }
 
 func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
@@ -64,6 +77,7 @@ func DownloadFile( dlFileParams DownloadFileParams ) ( errMsg error ) {
 
     return nil
 }
+
 func splitURL( fullURL string ) ( hName string, hPort string ) {
 	hostName, hostPort, errMsg := net.SplitHostPort( fullURL )
 	if errMsg != nil {
@@ -74,7 +88,6 @@ func splitURL( fullURL string ) ( hName string, hPort string ) {
 
 	return hName, hPort
 }
-
 
 func DownloadURL( dlURLParams DownloadURLParams ) ( urlContent string, errMsg error ) {
 
@@ -99,4 +112,45 @@ func DownloadURL( dlURLParams DownloadURLParams ) ( urlContent string, errMsg er
 
 //	contentLength := bytes.IndexByte( remoteContent, 0 )
     return string( remoteContent[ : ] ), nil
+}
+
+func GetGoVersion( ) ( goVersion string ) {
+	var versionNo = ""
+
+	httpResp, errMsg := http.Get( "https://www.golang.org" )
+	if errMsg != nil || httpResp.StatusCode < 200 || httpResp.StatusCode > 300 {
+		return "Got Error, Or Non 200 Code"
+	}
+	defer httpResp.Body.Close()
+
+	htmlRoot:= html.NewTokenizer( httpResp.Body )
+	if errMsg != nil {
+		return " Failed To Get Tokenizer"
+	}
+	reMatchScript, _ := regexp.Compile( "goVersion = \"(.*)\";")
+	inTags := false
+	loop:
+	for {
+		htmlToken := htmlRoot.Next()
+		switch htmlToken {
+			case html.ErrorToken:
+				break loop
+			case html.TextToken:
+				if inTags {
+					groupMatch := reMatchScript.FindAllStringSubmatch( string( htmlRoot.Text()[:] ), -1)
+					if len(groupMatch) > 0 {
+						versionNo = groupMatch[ 0 ][ 1 ]
+						break loop
+					}
+				}
+			case html.StartTagToken, html.EndTagToken:
+				if htmlRoot.Token().String() == "<script>" {
+					inTags = true
+				} else if htmlRoot.Token().String() == "</script>" && inTags {
+					inTags = false
+				}
+			}
+		}
+
+	return versionNo
 }

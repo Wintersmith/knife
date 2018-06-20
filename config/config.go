@@ -76,6 +76,17 @@ func ( configFile *Config ) Load( fileName string ) {
 		glog.Error( "Settings File Doesn't Exist, Please Verify: ", fileName )
 	}
 }
-func ( configFile *Config ) Get( sectionName string, elementName string ) {
+func ( configFile *Config ) Get( sectionKey string, elementKey string ) string {
+	returnValue := ""
+	for _ , indivSect := range configFile.sections {
+		if indivSect.sectionName == sectionKey {
+			for _, indivElements := range indivSect.sectionElements {
+				if indivElements.elementName == elementKey {
+					returnValue = indivElements.elementValue
+				}
+			}
+		}
+	}
 
+	return returnValue
 }

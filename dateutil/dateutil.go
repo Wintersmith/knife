@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 	"strconv"
-	"fmt"
 )
 
 var julianEaster = map[ int ]string {
@@ -66,7 +65,6 @@ func GregorianEaster( whichYear int ) time.Time {
 	if fullMoon, OK := paschalFullMoon[ int( gregorianEpact )]; OK {
 		stringYear := strconv.Itoa( whichYear )
 		stringDate := strings.Join( []string{ fullMoon, stringYear[ 2:len( stringYear ) ] }, "" )
-		fmt.Println( stringDate )
 
 		return NextDay( stringDate, SUNDAY )
 	}

@@ -1,10 +1,15 @@
 package rss
 
 import (
-	"fmt"
+	"bytes"
 	"encoding/xml"
-	"os"
+	"errors"
+	"fmt"
+	"golang.org/x/net/html/charset"
 	"io/ioutil"
+	"net/http"
+	"os"
+	"time"
 )
 
 type OPML struct {
@@ -54,10 +59,104 @@ type Outline struct {
 	Description  string    `xml:"description,attr,omitempty"`
 }
 
-func Parse( rssString string ) {
-	fmt.Printf( rssString )
+type Entry struct {
+	Title      string    `json:"title"`
+	Summary    string    `json:"summary"`
+	Content    string    `json:"content"`
+	Link       string    `json:"link"`
+	Date       time.Time `json:"date"`
+	DateValid  bool
+	ID         string       `json:"id"`
 }
 
+
+func Parse( rssString string ) {
+
+	feedXML, errMsg := getFeed(rssString)
+	if errMsg != nil {
+		fmt.Println("Couldn't Access Remote Feed")
+		return
+	}
+	matchFeed( feedXML )
+}
+func matchFeed( feedXML []byte ) {
+
+	v1Feed := RSSv1{}
+	xmlDecoder := xml.NewDecoder( bytes.NewReader( feedXML ) )
+	xmlDecoder.CharsetReader = charset.NewReaderLabel
+	xmlDecoder.Strict = false
+	errMsg := xmlDecoder.Decode( &v1Feed )
+
+	if errMsg != nil {
+		v2Feed := RSSv2{}
+		xmlDecoder = xml.NewDecoder( bytes.NewReader( feedXML ) )
+		xmlDecoder.CharsetReader = charset.NewReaderLabel
+		xmlDecoder.Strict = false
+		errMsg = xmlDecoder.Decode( &v2Feed)
+		if errMsg != nil {
+			atomFeed := Atom{}
+			xmlDecoder = xml.NewDecoder( bytes.NewReader( feedXML ) )
+			xmlDecoder.CharsetReader = charset.NewReaderLabel
+			xmlDecoder.Strict = false
+			errMsg = xmlDecoder.Decode( &atomFeed)
+			if errMsg != nil {
+				fmt.Println("Failed Everything", errMsg.Error())
+				return
+			} else {
+				fmt.Println("Returning atom")
+				parseAtom(atomFeed)
+			}
+		} else {
+			fmt.Println("Returning v2")
+			parseV2(v2Feed)
+		}
+	} else {
+		fmt.Println("Returning v1")
+		parseV1(v1Feed)
+	}
+}
+func parseAtom( aFeed Atom ) {
+	for _, atomItem := range aFeed.Items {
+		fmt.Println(atomItem)
+	}
+}
+func parseV1( v1 RSSv1 ) {
+	for _, v1Item := range v1.Items {
+		fmt.Println( v1Item )
+	}
+}
+func parseV2( v2 RSSv2 ) {
+	for _, v2Item := range v2.Channel.Items {
+		fmt.Println(v2Item)
+	}
+}
+func getFeed( remoteURL string ) ( []byte, error ) {
+	httpClient := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	httpReq, errMsg := http.NewRequest( http.MethodGet, remoteURL, nil )
+	if errMsg != nil {
+		fmt.Println( "Encountered Error Creating Request")
+	}
+	httpResp, errMsg := httpClient.Do( httpReq )
+	if errMsg != nil {
+		fmt.Println( "Encountered Error", errMsg.Error() )
+		return nil, errMsg
+	}
+	if httpResp.StatusCode != 200 {
+		return nil, errors.New( "Invalid URL" )
+	}
+	defer httpResp.Body.Close()
+
+	feedXML, errMsg := ioutil.ReadAll( httpResp.Body )
+	if errMsg != nil {
+		fmt.Println( "Couldn't Read Feed XML", errMsg.Error() )
+		return nil, errMsg
+	}
+
+	return feedXML, nil
+
+}
 func LoadOPML( opmlFile string ) ( Body ){
 	fmt.Println( "Loading", opmlFile )
 	opmlXML, errMsg := os.Open( opmlFile )
